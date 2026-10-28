@@ -25,6 +25,7 @@
  * Copyright (c) 2022      IBM Corporation.  All rights reserved.
  * Copyright (c) 2023      Jeffrey M. Squyres.  All rights reserved.
  * Copyright (c) 2023-2026 NVIDIA Corporation.  All rights reserved.
+ * Copyright (c) 2026      Barcelona Supercomputing Center (BSC-CNS). All Rights Reserved.
  * $COPYRIGHT$
  *
  * Additional copyrights may follow
@@ -722,16 +723,18 @@ bcast_rportlen:
         free(local_ranks);
         local_ranks = NULL;
 
-        /* call add_procs on the new ones */
-        rc = MCA_PML_CALL(add_procs(new_proc_list, nnew));
-        if (OMPI_ERR_NOT_READY == rc) {
-            /* This call is collective and blocking with nowhere to defer
-             * the work to, so wait for the exchange and ask once more; a
-             * peer still unwired then is one no btl will ever claim. */
-            (void) ompi_modex_wait_if_needed();
+        /* only a PML that requires the world adds them now; the rest on first use */
+        if (mca_pml_base_requires_world()) {
             rc = MCA_PML_CALL(add_procs(new_proc_list, nnew));
             if (OMPI_ERR_NOT_READY == rc) {
-                rc = OMPI_ERR_UNREACH;
+                /* This call is collective and blocking with nowhere to defer
+                 * the work to, so wait for the exchange and ask once more; a
+                 * peer still unwired then is one no btl will ever claim. */
+                (void) ompi_modex_wait_if_needed();
+                rc = MCA_PML_CALL(add_procs(new_proc_list, nnew));
+                if (OMPI_ERR_NOT_READY == rc) {
+                    rc = OMPI_ERR_UNREACH;
+                }
             }
         }
         free(new_proc_list);
